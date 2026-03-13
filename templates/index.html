@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>외래어 표기법 검사기</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,300;0,400;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #F4F1EB;
@@ -35,7 +35,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: 'Newsreader', Georgia, serif;
+      font-family: 'Inter', -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -60,7 +60,7 @@
     }
 
     .container {
-      max-width: 860px;
+      max-width: 640px;
       margin: 0 auto;
       padding: 32px 24px;
       display: flex;
@@ -90,7 +90,7 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 14px;
-      font-family: 'Newsreader', serif;
+      font-family: 'Inter', -apple-system, sans-serif;
       font-size: 15px;
       line-height: 1.6;
       background: var(--bg);
@@ -118,7 +118,7 @@
 
     button {
       cursor: pointer;
-      font-family: 'Newsreader', serif;
+      font-family: 'Inter', -apple-system, sans-serif;
       border: none;
       border-radius: 8px;
       transition: background .15s, opacity .15s;
@@ -195,7 +195,7 @@
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 8px 12px;
-      font-family: 'Newsreader', serif;
+      font-family: 'Inter', -apple-system, sans-serif;
       font-size: 14px;
       background: var(--bg);
       outline: none;
@@ -328,18 +328,55 @@
 
     .hidden { display: none; }
 
-    /* 버튼 사전추가 */
-    .btn-dict {
-      font-size: 11px;
-      padding: 4px 10px;
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      border-radius: 6px;
-      margin-top: 6px;
+    .dict-form {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
     }
 
-    .btn-dict:hover { background: var(--bg); }
+    .dict-form input {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      flex: 1;
+      min-width: 100px;
+    }
+
+    .dict-form input:focus { border-color: var(--accent); }
+
+    .dict-entry {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 6px;
+      background: var(--bg);
+      font-size: 13px;
+    }
+
+    .dict-entry:last-child { margin-bottom: 0; }
+
+    .btn-delete {
+      background: transparent;
+      border: none;
+      color: var(--text-light);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+    }
+
+    .btn-delete:hover { color: var(--warn); }
 
     @media (max-width: 600px) {
       .container { padding: 16px; }
@@ -351,10 +388,30 @@
 
 <header>
   <h1>외래어 표기법 검사기</h1>
-  <p>국립국어원 외래어 표기 용례 대조 · 용례 미등재 시 AI 판단</p>
+  <p>국립국어원 외래어 표기 용례 대조</p>
 </header>
 
 <div class="container">
+
+  <!-- 자체 사전 -->
+  <div class="card" id="dictSection">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>자체 사전</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="dictCount" style="font-size:12px;color:var(--text-light);font-weight:400;text-transform:none;letter-spacing:0;"></span>
+        <button class="btn-small" onclick="clearDict()">전체 삭제</button>
+      </div>
+    </div>
+    <input type="text" id="dictSearch" placeholder="사전 검색…"
+      oninput="renderDictSection()"
+      style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-family:'Inter',-apple-system,sans-serif;font-size:14px;background:var(--bg);color:var(--text);outline:none;margin-bottom:8px;">
+    <div id="dictList"></div>
+    <div class="add-word-row" style="margin-top:8px;">
+      <input type="text" id="dict-add-orig" placeholder="원어 (예: Gumport)">
+      <input type="text" id="dict-add-korean" placeholder="한국어 표기 (예: 검포트)">
+      <button class="btn-small" onclick="addToDictManual()">추가</button>
+    </div>
+  </div>
 
   <!-- 입력 -->
   <div class="card">
@@ -411,6 +468,124 @@
 <script>
   let candidates = [];
   let addedWords = [];
+
+  // ── 자체 사전 ─────────────────────────────────────────────────
+
+  function loadDict() {
+    try { return JSON.parse(localStorage.getItem('customDict') || '{}'); }
+    catch { return {}; }
+  }
+
+  function saveDict(dict) {
+    localStorage.setItem('customDict', JSON.stringify(dict));
+    renderDictSection();
+  }
+
+  function addToDict(idx, word) {
+    const orig = document.getElementById('dict-orig-' + idx).value.trim();
+    const korean = document.getElementById('dict-korean-' + idx).value.trim();
+    if (!korean) { alert('올바른 한국어 표기를 입력해주세요.'); return; }
+
+    const dict = loadDict();
+    const clean = word.replace(/ /g, '');
+    dict[clean] = { correct: korean, original: orig };
+    saveDict(dict);
+
+    // 결과 항목 즉시 업데이트
+    const status = korean === clean ? 'custom_correct' : 'custom_fix';
+    const el = document.getElementById('result-' + idx);
+    el.outerHTML = renderResultItem({ word, status, correction: korean !== clean ? korean : undefined }, idx);
+  }
+
+  function deleteDictEntry(key) {
+    const dict = loadDict();
+    delete dict[key];
+    saveDict(dict);
+  }
+
+  function clearDict() {
+    if (!confirm('자체 사전을 전부 삭제할까요?')) return;
+    localStorage.removeItem('customDict');
+    renderDictSection();
+  }
+
+  function addToDictManual() {
+    const orig = document.getElementById('dict-add-orig').value.trim();
+    const korean = document.getElementById('dict-add-korean').value.trim();
+    if (!korean) { alert('한국어 표기를 입력해주세요.'); return; }
+    const key = orig || korean;
+    const dict = loadDict();
+    dict[key.replace(/ /g, '')] = { correct: korean, original: orig };
+    saveDict(dict);
+    document.getElementById('dict-add-orig').value = '';
+    document.getElementById('dict-add-korean').value = '';
+  }
+
+  function renderDictSection() {
+    const dict = loadDict();
+    const keys = Object.keys(dict);
+    const list = document.getElementById('dictList');
+    if (!list) return;
+
+    // 항목 수 업데이트
+    const countEl = document.getElementById('dictCount');
+    if (countEl) countEl.textContent = keys.length > 0 ? `${keys.length}개` : '';
+
+    const query = (document.getElementById('dictSearch')?.value || '').trim().toLowerCase();
+
+    // 검색어 없으면 목록 숨김
+    if (!query) {
+      list.innerHTML = '';
+      return;
+    }
+
+    const filtered = keys.filter(k => {
+      const entry = dict[k];
+      const correct = typeof entry === 'object' ? entry.correct : entry;
+      const orig = typeof entry === 'object' ? (entry.original || '') : '';
+      return k.toLowerCase().includes(query) || correct.toLowerCase().includes(query) || orig.toLowerCase().includes(query);
+    });
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<div style="font-size:13px;color:var(--text-light);padding:4px 0;">검색 결과가 없습니다.</div>';
+      return;
+    }
+
+    // 최대 50개만 표시
+    const show = filtered.slice(0, 50);
+    list.innerHTML = show.map(k => {
+      const entry = dict[k];
+      const correct = typeof entry === 'object' ? entry.correct : entry;
+      const orig = typeof entry === 'object' ? (entry.original || '') : '';
+      return `
+        <div class="dict-entry">
+          <span>
+            <strong>${escHtml(k)}</strong>
+            ${orig ? ` <span style="color:var(--text-muted);font-size:12px;">(${escHtml(orig)})</span>` : ''}
+            ${correct !== k ? ` → <span style="color:var(--accent);">${escHtml(correct)}</span>` : ' <span style="color:var(--correct);font-size:12px;">✓ 올바른 표기</span>'}
+          </span>
+          <button class="btn-delete" onclick="deleteDictEntry('${escHtml(k)}')">✕</button>
+        </div>`;
+    }).join('') + (filtered.length > 50 ? `<div style="font-size:12px;color:var(--text-light);padding:6px 0;">… 외 ${filtered.length - 50}개. 검색어를 구체적으로 입력하세요.</div>` : '');
+  }
+
+  // 백엔드 전달용 dict 포맷 변환 (key → correct)
+  function getDictForApi() {
+    const dict = loadDict();
+    const result = {};
+    for (const [k, v] of Object.entries(dict)) {
+      result[k] = typeof v === 'object' ? v.correct : v;
+    }
+    return result;
+  }
+
+  // 사전 초기 렌더링 (항목 수만 표시)
+  (function() {
+    const dict = loadDict();
+    const keys = Object.keys(dict);
+    const countEl = document.getElementById('dictCount');
+    if (countEl && keys.length > 0) countEl.textContent = `${keys.length}개`;
+  })();
 
   // 글자 수
   document.getElementById('textInput').addEventListener('input', e => {
@@ -562,7 +737,7 @@
       const resp = await fetch('/api/check', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({words: wordsPayload}),
+        body: JSON.stringify({words: wordsPayload, custom_dict: getDictForApi()}),
       });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
@@ -702,6 +877,7 @@
         </div>`;
 
     } else {
+      const origVal = escHtml(r.original || '');
       return `
         <div class="result-item status-neutral" id="result-${idx}">
           <div class="result-header">
@@ -710,6 +886,11 @@
               <div class="result-meta">국립국어원 용례 미등재</div>
             </div>
             <span class="badge badge-neutral">용례 없음</span>
+          </div>
+          <div class="dict-form">
+            <input type="text" id="dict-orig-${idx}" placeholder="원어" value="${origVal}">
+            <input type="text" id="dict-korean-${idx}" placeholder="올바른 한국어 표기" value="${escHtml(r.word)}">
+            <button class="btn-small" onclick="addToDict(${idx}, '${escHtml(r.word)}')">사전에 저장</button>
           </div>
         </div>`;
     }
