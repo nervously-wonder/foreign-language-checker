@@ -13,7 +13,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from kiwipiepy import Kiwi
-from groq import Groq
+from google import genai
+from google.genai import types
 
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
@@ -23,8 +24,8 @@ app = Flask(__name__)
 KORNORMS_API_KEY = os.getenv("KORNORMS_API_KEY")
 KORNORMS_API_URL = "https://korean.go.kr/kornorms/exampleReqList.do"
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-_groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+_gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 kiwi = Kiwi()
 
@@ -343,26 +344,27 @@ _GEMINI_SYSTEM = """당신은 국립국어원 외래어 표기법(언어권별 �
 
 
 def gemini_check(word, original=''):
-    """국립국어원 용례에 없는 단어를 Groq으로 판단."""
-    if not _groq_client:
+    """국립국어원 용례에 없는 단어를 Gemini로 판단."""
+    if not _gemini_client:
         return None
     try:
         prompt = f'단어: "{word}"'
         if original:
             prompt += f' (원어 철자: {original})'
-        response = _groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": _GEMINI_SYSTEM},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=500,
+        response = _gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_GEMINI_SYSTEM,
+                max_output_tokens=500,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
         )
-        raw = response.choices[0].message.content.strip()
+        raw = response.text.strip()
         raw = re.sub(r"```json|```", "", raw).strip()
         return json.loads(raw)
     except Exception as e:
-        logging.error(f"groq_check 오류 ({word}): {e}")
+        logging.error(f"gemini_check 오류 ({word}): {e}")
         return None
 
 
