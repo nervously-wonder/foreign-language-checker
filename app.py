@@ -48,6 +48,7 @@ _COMMON_KOREAN = {
     "활동", "효과", "패턴", "미학적", "무제", "평론", "머리카락", "잉태", "포착",
     "그리고", "하지만", "그러나", "따라서", "또한", "이것", "저것", "그것",
     "평론가", "연구자", "학자", "큐레이터", "편집자", "번역가", "기획자",
+    "조우", "대화", "충돌", "탈출", "귀환", "출발", "도착", "접근",
 }
 
 
@@ -217,7 +218,26 @@ def extract_candidates(text):
                     to_remove.add(j)
 
     deduped = [f for i, f in enumerate(filtered) if i not in to_remove]
-    return deduped, original_map
+
+    # 다중어 후보의 마지막 단어가 다른 후보의 접두어인 경우 분리
+    # 예: '터너 컨템포러' + '컨템포러리' → '터너', '컨템포러리'
+    to_add = []
+    to_drop = set()
+    for a in deduped:
+        if ' ' not in a:
+            continue
+        parts = a.split()
+        last = parts[-1]
+        for b in deduped:
+            if b != a and b.startswith(last) and len(b) > len(last):
+                prefix = ' '.join(parts[:-1])
+                if len(prefix.replace(' ', '')) >= 2:
+                    to_add.append(prefix)
+                to_drop.add(a)
+                break
+
+    result = [c for c in deduped if c not in to_drop] + to_add
+    return result, original_map
 
 
 # ── 국립국어원 API ────────────────────────────────────────────────
