@@ -338,21 +338,51 @@ def check_word(word, custom_dict=None, original=''):
         if typo_hits:
             return {"word": word, "status": "typo_candidate", "similar": typo_hits}
 
-    # 1차: 정확 일치
+    def make_correct(item):
+        return {
+            "word": word, "status": "correct",
+            "korean": item.get("korean_mark", "").strip(),
+            "original": item.get("srclang_mark", ""),
+            "country": item.get("guk_nm", ""),
+            "language": item.get("lang_nm", ""),
+            "category": item.get("foreign_gubun", ""),
+        }
+
+    # 원어 병기가 있으면 원어로 먼저 검색
+    if original:
+        time.sleep(0.15)
+        data = search_kornorms(original, "equal")
+        items = parse_items(data)
+        for item in items:
+            if is_chinese(item):
+                continue
+            src = item.get("srclang_mark", "").strip()
+            korean = item.get("korean_mark", "").strip()
+            if src.lower() == original.lower():
+                if korean == clean:
+                    return make_correct(item)
+                else:
+                    # 원어는 맞지만 한국어 표기가 다름
+                    return {
+                        "word": word, "status": "check",
+                        "suggestions": [{
+                            "korean": korean,
+                            "original": src,
+                            "country": item.get("guk_nm", ""),
+                            "language": item.get("lang_nm", ""),
+                            "category": item.get("foreign_gubun", ""),
+                            "distance": levenshtein(clean, korean),
+                        }],
+                    }
+
+    # 1차: 한국어 정확 일치
     data = search_kornorms(clean, "equal")
     items = parse_items(data)
     if items:
         for item in items:
             korean = item.get("korean_mark", "").strip()
             if korean == clean and not is_chinese(item):
-                return {
-                    "word": word, "status": "correct",
-                    "korean": korean,
-                    "original": item.get("srclang_mark", ""),
-                    "country": item.get("guk_nm", ""),
-                    "language": item.get("lang_nm", ""),
-                    "category": item.get("foreign_gubun", ""),
-                }
+                return make_correct(item)
 
     time.sleep(0.15)
 
@@ -366,14 +396,7 @@ def check_word(word, custom_dict=None, original=''):
             if not korean or is_chinese(item):
                 continue
             if korean == clean:
-                return {
-                    "word": word, "status": "correct",
-                    "korean": korean,
-                    "original": item.get("srclang_mark", ""),
-                    "country": item.get("guk_nm", ""),
-                    "language": item.get("lang_nm", ""),
-                    "category": item.get("foreign_gubun", ""),
-                }
+                return make_correct(item)
             if is_similar(clean, korean):
                 relevant.append({
                     "korean": korean,
@@ -415,7 +438,6 @@ def check_word(word, custom_dict=None, original=''):
     if not KORNORMS_API_KEY:
         return {"word": word, "status": "no_api_key"}
 
-    # 국립국어원 용례 없음 → 언어 선택 후 재검사 필요
     return {"word": word, "status": "not_found", "original": original}
 
 
