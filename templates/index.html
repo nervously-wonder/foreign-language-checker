@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>외래어 표기법 검사기</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,300;0,400;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F4F1EB;
+      --bg-card: #FEFDFB;
+      --border: #E2DFD8;
+      --text: #2A2520;
+      --text-muted: #8A847A;
+      --text-light: #B1ACA2;
+      --accent: #C15F3C;
+      --accent-hover: #A8492A;
+      --correct: #4A7C59;
+      --correct-bg: rgba(74,124,89,0.07);
+      --correct-border: rgba(74,124,89,0.2);
+      --warn: #B54A4A;
+      --warn-bg: rgba(181,74,74,0.07);
+      --warn-border: rgba(181,74,74,0.2);
+      --check: #7A6A2A;
+      --check-bg: rgba(122,106,42,0.07);
+      --check-border: rgba(122,106,42,0.2);
+      --neutral-bg: rgba(138,132,122,0.06);
+      --neutral-border: rgba(138,132,122,0.2);
+      --ai-bg: rgba(91,123,165,0.07);
+      --ai-border: rgba(91,123,165,0.2);
+      --ai-text: #3A5A8A;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Newsreader', Georgia, serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 160px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: 'Newsreader', serif;
+      font-size: 15px;
+      line-height: 1.6;
+      background: var(--bg);
+      color: var(--text);
+      resize: vertical;
+      outline: none;
+      transition: border-color .15s;
+    }
+
+    textarea:focus { border-color: var(--accent); }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 12px;
+      gap: 10px;
+    }
+
+    .char-count {
+      font-size: 12px;
+      color: var(--text-light);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    button {
+      cursor: pointer;
+      font-family: 'Newsreader', serif;
+      border: none;
+      border-radius: 8px;
+      transition: background .15s, opacity .15s;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 22px;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-small {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 5px 12px;
+    }
+
+    .btn-small:hover { background: var(--bg); }
+
+    /* 후보 목록 */
+    .candidate-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .candidate-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--bg);
+      font-size: 14px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      user-select: none;
+    }
+
+    .candidate-chip.selected {
+      border-color: var(--accent);
+      background: rgba(193,95,60,0.06);
+    }
+
+    .candidate-chip input[type=checkbox] {
+      accent-color: var(--accent);
+      width: 14px;
+      height: 14px;
+    }
+
+    .chip-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    /* 직접 입력 */
+    .add-word-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .add-word-row input {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-family: 'Newsreader', serif;
+      font-size: 14px;
+      background: var(--bg);
+      outline: none;
+    }
+
+    .add-word-row input:focus { border-color: var(--accent); }
+
+    /* 결과 */
+    .result-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+
+    .result-item:last-child { margin-bottom: 0; }
+
+    .result-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .result-word {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 12px;
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .result-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    .result-suggestion {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .suggestion-word {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .suggestion-reason {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .suggestion-basis {
+      font-size: 11px;
+      color: var(--text-light);
+      margin-top: 2px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* 상태별 색상 */
+    .status-correct  { background: var(--bg-card); border-color: var(--correct-border); }
+    .badge-correct   { background: var(--correct-bg); color: var(--correct); }
+
+    .status-warn     { background: var(--bg-card); border-color: var(--warn-border); }
+    .badge-warn      { background: var(--warn-bg); color: var(--warn); }
+
+    .status-check    { background: var(--bg-card); border-color: var(--check-border); }
+    .badge-check     { background: var(--check-bg); color: var(--check); }
+
+    .status-ai       { background: var(--bg-card); border-color: var(--ai-border); }
+    .badge-ai-correct { background: var(--ai-bg); color: var(--ai-text); }
+    .badge-ai-warn   { background: var(--warn-bg); color: var(--warn); }
+    .badge-ai-unknown { background: var(--neutral-bg); color: var(--text-muted); }
+
+    .status-neutral  { background: var(--bg-card); border-color: var(--border); }
+    .badge-neutral   { background: var(--neutral-bg); color: var(--text-muted); }
+
+    /* 요약 */
+    .summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .summary-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 5px;
+    }
+
+    .dot-correct { background: var(--correct); }
+    .dot-warn    { background: var(--warn); }
+    .dot-check   { background: #7A6A2A; }
+    .dot-ai      { background: var(--ai-text); }
+    .dot-neutral { background: var(--text-light); }
+
+    /* 로딩 */
+    .loading-box {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin-bottom: 10px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none; }
+
+    /* 버튼 사전추가 */
+    .btn-dict {
+      font-size: 11px;
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 6px;
+      margin-top: 6px;
+    }
+
+    .btn-dict:hover { background: var(--bg); }
+
+    @media (max-width: 600px) {
+      .container { padding: 16px; }
+      .card { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>외래어 표기법 검사기</h1>
+  <p>국립국어원 외래어 표기 용례 대조 · 용례 미등재 시 AI 판단</p>
+</header>
+
+<div class="container">
+
+  <!-- 입력 -->
+  <div class="card">
+    <div class="card-title">문서 입력</div>
+    <textarea id="textInput" placeholder="검사할 텍스트를 붙여넣으세요…"></textarea>
+    <div class="row">
+      <span class="char-count" id="charCount">0자</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-small" onclick="resetAll()">초기화</button>
+        <button class="btn-primary" id="extractBtn" onclick="extractCandidates()">외래어 후보 추출</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 후보 선택 -->
+  <div class="card hidden" id="candidatesSection">
+    <div class="card-title">후보 선택</div>
+    <div class="chip-actions">
+      <button class="btn-small" onclick="selectAll()">전체 선택</button>
+      <button class="btn-small" onclick="selectNone()">전체 해제</button>
+    </div>
+    <div class="candidate-list" id="candidateList"></div>
+    <div class="add-word-row">
+      <input type="text" id="addWordInput" placeholder="직접 추가할 단어 입력"
+        onkeydown="if(event.key==='Enter') addWord()">
+      <button class="btn-small" onclick="addWord()">추가</button>
+    </div>
+    <div class="row" style="margin-top:16px;">
+      <span class="char-count" id="selectedCount">0개 선택됨</span>
+      <button class="btn-primary" id="checkBtn" onclick="checkWords()">검사하기</button>
+    </div>
+  </div>
+
+  <!-- 로딩 -->
+  <div class="card hidden" id="loadingSection">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <div id="loadingText">검사 중…</div>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div class="card hidden" id="resultsSection">
+    <div class="card-title">검사 결과</div>
+    <div id="summaryBox" style="margin-bottom:16px;"></div>
+    <div id="resultsList"></div>
+    <div style="margin-top:16px;text-align:right;">
+      <button class="btn-small" onclick="resetAll()">처음으로</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let candidates = [];
+  let addedWords = [];
+
+  // 글자 수
+  document.getElementById('textInput').addEventListener('input', e => {
+    document.getElementById('charCount').textContent = e.target.value.length + '자';
+  });
+
+  // ── 후보 추출 ─────────────────────────────────────────────────
+
+  async function extractCandidates() {
+    const text = document.getElementById('textInput').value.trim();
+    if (!text) return;
+
+    const btn = document.getElementById('extractBtn');
+    btn.disabled = true;
+    btn.textContent = '추출 중…';
+
+    try {
+      const resp = await fetch('/api/extract', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text}),
+      });
+      const data = await resp.json();
+      candidates = data.candidates;
+      addedWords = [];
+
+      if (candidates.length === 0) {
+        alert('외래어 후보를 찾지 못했어요. 단어를 직접 추가해 검사할 수 있어요.');
+        document.getElementById('candidatesSection').classList.remove('hidden');
+      } else {
+        renderCandidates();
+        document.getElementById('candidatesSection').classList.remove('hidden');
+      }
+    } catch (e) {
+      alert('추출 중 오류가 발생했어요.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '외래어 후보 추출';
+    }
+  }
+
+  function getWord(entry) {
+    return typeof entry === 'string' ? entry : entry.word;
+  }
+  function getOriginal(entry) {
+    return typeof entry === 'string' ? '' : (entry.original || '');
+  }
+
+  function renderCandidates(prevStates) {
+    const list = document.getElementById('candidateList');
+    const all = [...candidates, ...addedWords];
+
+    list.innerHTML = all.map((entry, i) => {
+      const word = getWord(entry);
+      const orig = getOriginal(entry);
+      const isChecked = prevStates ? (prevStates[word] !== false) : true;
+      const isAdded = i >= candidates.length;
+      return `
+        <label class="candidate-chip ${isChecked ? 'selected' : ''}" id="chip${i}">
+          <input type="checkbox" id="cb${i}" ${isChecked ? 'checked' : ''}
+            onchange="toggleChip(${i}, this.checked); updateSelectedCount()">
+          ${word}${orig ? ` <span style="font-size:11px;color:var(--text-muted);">(${orig})</span>` : ''}${isAdded ? ' <span style="font-size:11px;color:var(--accent);">추가</span>' : ''}
+        </label>`;
+    }).join('');
+
+    updateSelectedCount();
+  }
+
+  function toggleChip(i, checked) {
+    const chip = document.getElementById('chip' + i);
+    if (checked) chip.classList.add('selected');
+    else chip.classList.remove('selected');
+  }
+
+  function updateSelectedCount() {
+    const all = [...candidates, ...addedWords];
+    const n = all.filter((_, i) => {
+      const cb = document.getElementById('cb' + i);
+      return cb && cb.checked;
+    }).length;
+    document.getElementById('selectedCount').textContent = n + '개 선택됨';
+  }
+
+  function selectAll() {
+    const all = [...candidates, ...addedWords];
+    all.forEach((_, i) => {
+      const cb = document.getElementById('cb' + i);
+      if (cb) { cb.checked = true; toggleChip(i, true); }
+    });
+    updateSelectedCount();
+  }
+
+  function selectNone() {
+    const all = [...candidates, ...addedWords];
+    all.forEach((_, i) => {
+      const cb = document.getElementById('cb' + i);
+      if (cb) { cb.checked = false; toggleChip(i, false); }
+    });
+    updateSelectedCount();
+  }
+
+  function saveCheckStates() {
+    const all = [...candidates, ...addedWords];
+    const states = {};
+    all.forEach((entry, i) => {
+      const word = getWord(entry);
+      const cb = document.getElementById('cb' + i);
+      if (cb) states[word] = cb.checked;
+    });
+    return states;
+  }
+
+  function addWord() {
+    const input = document.getElementById('addWordInput');
+    const word = input.value.trim();
+    if (!word) return;
+    const states = saveCheckStates();
+    addedWords.push(word);
+    input.value = '';
+    renderCandidates(states);
+  }
+
+  // ── 검사 ──────────────────────────────────────────────────────
+
+  async function checkWords() {
+    const all = [...candidates, ...addedWords];
+    const selected = all.filter((_, i) => {
+      const cb = document.getElementById('cb' + i);
+      return cb && cb.checked;
+    });
+
+    if (selected.length === 0) {
+      alert('검사할 단어를 선택해주세요.');
+      return;
+    }
+
+    document.getElementById('candidatesSection').classList.add('hidden');
+    document.getElementById('loadingSection').classList.remove('hidden');
+    document.getElementById('loadingText').textContent = `${selected.length}개 단어 검사 중…`;
+
+    // {word, original} 형태로 변환
+    const wordsPayload = selected.map(entry =>
+      typeof entry === 'string'
+        ? {word: entry, original: ''}
+        : {word: entry.word, original: entry.original || ''}
+    );
+
+    try {
+      const resp = await fetch('/api/check', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({words: wordsPayload}),
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      renderResults(data.results);
+    } catch (e) {
+      alert('검사 중 오류가 발생했어요.\n' + (e.message || ''));
+      document.getElementById('candidatesSection').classList.remove('hidden');
+    } finally {
+      document.getElementById('loadingSection').classList.add('hidden');
+    }
+  }
+
+  // ── 결과 렌더링 ───────────────────────────────────────────────
+
+  function renderResults(results) {
+    const list = document.getElementById('resultsList');
+    const counts = { correct: 0, warn: 0, check: 0, aiCorrect: 0, aiWrong: 0, aiUnknown: 0, notfound: 0 };
+
+    list.innerHTML = results.map((r, idx) => {
+      if (r.status === 'correct') {
+        counts.correct++;
+        return `
+          <div class="result-item status-correct">
+            <div class="result-header">
+              <div>
+                <div class="result-word">${r.word}</div>
+                <div class="result-meta">
+                  ${r.original ? '원어 ' + r.original : ''}
+                  ${r.country ? ' · ' + r.country : ''}
+                  ${r.language ? ' · ' + r.language : ''}
+                </div>
+              </div>
+              <span class="badge badge-correct">올바른 표기</span>
+            </div>
+          </div>`;
+
+      } else if (r.status === 'check') {
+        counts.check++;
+        const sugs = (r.suggestions || []).map(s =>
+          `<div style="margin-top:6px;">
+            <span class="suggestion-word" style="color:var(--check);">${s.korean}</span>
+            <span class="result-meta"> ${s.original ? '— ' + s.original : ''}${s.country ? ', ' + s.country : ''}</span>
+          </div>`
+        ).join('');
+        return `
+          <div class="result-item status-check">
+            <div class="result-header">
+              <div class="result-word">${r.word}</div>
+              <span class="badge badge-check">확인 필요</span>
+            </div>
+            <div class="result-suggestion">${sugs}</div>
+          </div>`;
+
+      } else if (r.status === 'custom_correct') {
+        counts.correct++;
+        return `
+          <div class="result-item status-correct">
+            <div class="result-header">
+              <div>
+                <div class="result-word">${r.word}</div>
+                <div class="result-meta">자체 사전 기준 올바른 표기</div>
+              </div>
+              <span class="badge badge-correct">올바른 표기</span>
+            </div>
+          </div>`;
+
+      } else if (r.status === 'custom_fix') {
+        counts.warn++;
+        return `
+          <div class="result-item status-warn">
+            <div class="result-header">
+              <div class="result-word">${r.word}</div>
+              <span class="badge badge-warn">수정 필요</span>
+            </div>
+            <div class="result-suggestion">
+              <span class="suggestion-word" style="color:var(--warn);">${r.correction || ''}</span>
+              <div class="suggestion-reason">자체 사전 기준 권장 표기</div>
+            </div>
+          </div>`;
+
+      } else if (r.status === 'typo_candidate') {
+        counts.check++;
+        const similars = (r.similar || []).map(s =>
+          `<div style="margin-top:6px;">
+            <span class="suggestion-word" style="color:var(--check);">${s.word}</span>
+            <span class="result-meta"> — 편집 거리 ${s.distance}</span>
+          </div>`
+        ).join('');
+        return `
+          <div class="result-item status-check">
+            <div class="result-header">
+              <div class="result-word">${r.word}</div>
+              <span class="badge badge-check">오타 의심</span>
+            </div>
+            <div class="result-suggestion">${similars}</div>
+          </div>`;
+
+      } else if (r.status === 'ai_correct') {
+        counts.aiCorrect++;
+        return `
+          <div class="result-item status-ai">
+            <div class="result-header">
+              <div>
+                <div class="result-word">${r.word}</div>
+                ${r.reason ? `<div class="result-meta">${r.reason}</div>` : ''}
+              </div>
+              <span class="badge badge-ai-correct">올바른 표기 · AI</span>
+            </div>
+            ${r.basis ? `<div class="suggestion-basis" style="margin-top:6px;">${r.basis}</div>` : ''}
+          </div>`;
+
+      } else if (r.status === 'ai_wrong') {
+        counts.aiWrong++;
+        return `
+          <div class="result-item status-warn">
+            <div class="result-header">
+              <div class="result-word">${r.word}</div>
+              <span class="badge badge-ai-warn">수정 권장 · AI</span>
+            </div>
+            ${r.suggested ? `
+            <div class="result-suggestion">
+              <span class="suggestion-word" style="color:var(--warn);">${r.suggested}</span>
+              ${r.reason ? `<div class="suggestion-reason">${r.reason}</div>` : ''}
+              ${r.basis ? `<div class="suggestion-basis">${r.basis}</div>` : ''}
+            </div>` : ''}
+          </div>`;
+
+      } else if (r.status === 'ai_unknown') {
+        counts.aiUnknown++;
+        return `
+          <div class="result-item status-neutral">
+            <div class="result-header">
+              <div class="result-word">${r.word}</div>
+              <span class="badge badge-ai-unknown">용례 없음 · AI</span>
+            </div>
+            ${r.suggested ? `
+            <div class="result-suggestion">
+              <span class="suggestion-word" style="color:var(--text);">${r.suggested}</span>
+              ${r.reason ? `<div class="suggestion-reason">${r.reason}</div>` : ''}
+              ${r.basis ? `<div class="suggestion-basis">${r.basis}</div>` : ''}
+            </div>` : (r.reason ? `<div class="result-meta" style="margin-top:6px;">${r.reason}</div>` : '')}
+          </div>`;
+
+      } else {
+        counts.notfound++;
+        return `
+          <div class="result-item status-neutral">
+            <div class="result-header">
+              <div>
+                <div class="result-word">${r.word}</div>
+                <div class="result-meta">국립국어원 용례 미등재</div>
+              </div>
+              <span class="badge badge-neutral">용례 없음</span>
+            </div>
+          </div>`;
+      }
+    }).join('');
+
+    // 요약
+    const parts = [];
+    if (counts.correct)   parts.push(`<span><span class="summary-dot dot-correct"></span>올바름 ${counts.correct}</span>`);
+    if (counts.aiCorrect) parts.push(`<span><span class="summary-dot dot-ai"></span>올바름(AI) ${counts.aiCorrect}</span>`);
+    if (counts.check)     parts.push(`<span><span class="summary-dot dot-check"></span>확인 필요 ${counts.check}</span>`);
+    if (counts.warn)      parts.push(`<span><span class="summary-dot dot-warn"></span>수정 필요 ${counts.warn}</span>`);
+    if (counts.aiWrong)   parts.push(`<span><span class="summary-dot dot-warn"></span>수정 권장(AI) ${counts.aiWrong}</span>`);
+    if (counts.aiUnknown) parts.push(`<span><span class="summary-dot dot-neutral"></span>용례 없음(AI) ${counts.aiUnknown}</span>`);
+    if (counts.notfound)  parts.push(`<span><span class="summary-dot dot-neutral"></span>용례 없음 ${counts.notfound}</span>`);
+
+    document.getElementById('summaryBox').innerHTML =
+      `<div class="summary">${parts.join('')}</div>`;
+    document.getElementById('resultsSection').classList.remove('hidden');
+  }
+
+  // ── 초기화 ────────────────────────────────────────────────────
+
+  function resetAll() {
+    document.getElementById('textInput').value = '';
+    document.getElementById('charCount').textContent = '0자';
+    document.getElementById('candidatesSection').classList.add('hidden');
+    document.getElementById('loadingSection').classList.add('hidden');
+    document.getElementById('resultsSection').classList.add('hidden');
+    document.getElementById('resultsList').innerHTML = '';
+    document.getElementById('summaryBox').innerHTML = '';
+    candidates = [];
+    addedWords = [];
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  }
+</script>
+
+</body>
+</html>
