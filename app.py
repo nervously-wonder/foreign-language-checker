@@ -1,11 +1,10 @@
 """
 외래어 표기법 검사기
-Flask 백엔드: 후보 추출 → 국립국어원 API → Gemini 판단
+Flask 백엔드: 후보 추출 → 국립국어원 API
 """
 
 import os
 import re
-import json
 import time
 import logging
 import requests
@@ -13,8 +12,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from kiwipiepy import Kiwi
-from google import genai
-from google.genai import types
 
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
@@ -23,9 +20,6 @@ app = Flask(__name__)
 
 KORNORMS_API_KEY = os.getenv("KORNORMS_API_KEY")
 KORNORMS_API_URL = "https://korean.go.kr/kornorms/exampleReqList.do"
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-_gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 kiwi = Kiwi()
 
@@ -326,95 +320,6 @@ def find_typo_candidates(word, custom_dict, max_distance=2):
     return sorted(candidates, key=lambda x: x["distance"])[:3]
 
 
-# ── Gemini 판단 ───────────────────────────────────────────────────
-
-_GEMINI_SYSTEM = """당신은 국립국어원 외래어 표기법(언어권별 세칙) 전문가입니다.
-
-【중요 전제】
-- 이 함수가 호출되는 시점에 이미 국립국어원 어문규범 API로 용례집을 검색했고, 해당 단어는 용례집에 등재되어 있지 않음이 확인된 상태입니다.
-- 따라서 status는 반드시 "unknown"입니다. "correct"나 "wrong"을 반환하지 마세요.
-- 용례집에 있다고 주장하지 마세요.
-
-【판단 기준】
-- 발음기호(IPA)가 제공된 경우: IPA를 최우선 근거로 삼아 해당 언어의 외래어 표기법 세칙을 적용하세요.
-- 발음기호가 없는 경우: 원어 철자와 언어를 바탕으로 외래어 표기법 세칙을 적용하세요.
-
-순수 JSON 객체만 반환하세요 (마크다운 없이):
-{"status":"unknown","suggested":"규칙 적용 표기","reason":"한국어 근거","basis":"외래어 표기법 몇 장 몇 항"}"""
-
-_LANG_NAMES = {
-    'en': '영어', 'de': '독일어', 'fr': '프랑스어', 'es': '스페인어',
-    'it': '이탈리아어', 'pt': '포르투갈어', 'nl': '네덜란드어', 'ru': '러시아어',
-    'ja': '일본어',
-}
-
-
-def get_wiktionary_ipa(word, lang_code='en'):
-    """Wiktionary에서 원어 IPA 발음기호 조회."""
-    if not word:
-        return None
-    try:
-        url = "https://en.wiktionary.org/w/api.php"
-        params = {
-            'action': 'parse',
-            'page': word,
-            'prop': 'wikitext',
-            'format': 'json',
-        }
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        if 'error' in data:
-            return None
-        wikitext = data.get('parse', {}).get('wikitext', {}).get('*', '')
-        if not wikitext:
-            return None
-        # {{IPA|en|/ˈwɜːrd/}} 형태
-        ipa_matches = re.findall(r'\{\{IPA[^}]*?(/[^/}\n]+/)', wikitext)
-        if ipa_matches:
-            return ipa_matches[0]
-        # [ˈwɜːrd] 형태
-        ipa_matches2 = re.findall(r'\{\{IPA[^}]*?\[([^\[\]\n]+)\]', wikitext)
-        if ipa_matches2:
-            return f'[{ipa_matches2[0]}]'
-        return None
-    except Exception as e:
-        logging.error(f"Wiktionary 조회 오류 ({word}): {e}")
-        return None
-
-
-def gemini_check(word, original='', language='', ipa=''):
-    """국립국어원 용례에 없는 단어를 Gemini로 판단."""
-    if not _gemini_client:
-        return None
-    try:
-        details = []
-        if original:
-            details.append(f'원어 철자: {original}')
-        if language:
-            details.append(f'언어: {_LANG_NAMES.get(language, language)}')
-        if ipa:
-            details.append(f'발음기호: {ipa}')
-        prompt = f'단어: "{word}"'
-        if details:
-            prompt += f' ({", ".join(details)})'
-        response = _gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=_GEMINI_SYSTEM,
-                max_output_tokens=500,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        raw = response.text.strip()
-        raw = re.sub(r"```json|```", "", raw).strip()
-        return json.loads(raw)
-    except Exception as e:
-        logging.error(f"gemini_check 오류 ({word}): {e}")
-        return None
-
-
 # ── 단어 검사 ─────────────────────────────────────────────────────
 
 def check_word(word, custom_dict=None, original=''):
@@ -572,40 +477,6 @@ def api_check():
         logging.error(f"api_check 오류: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-@app.route("/api/check_language", methods=["POST"])
-def api_check_language():
-    try:
-        word = request.json.get("word", "")
-        language = request.json.get("language", "")
-        original = request.json.get("original", "")
-
-        if not word:
-            return jsonify({"error": "word required"}), 400
-
-        # Wiktionary에서 IPA 조회 (원어 철자 우선, 없으면 한국어 단어로)
-        ipa = None
-        if language and language != 'other':
-            lookup_word = original if original else word
-            ipa = get_wiktionary_ipa(lookup_word, language)
-            logging.info(f"Wiktionary IPA ({lookup_word}): {ipa}")
-
-        gemini_result = gemini_check(word, original, language, ipa or '')
-        if gemini_result:
-            status = gemini_result.get("status", "unknown")
-            return jsonify({
-                "word": word,
-                "status": "ai_" + status,
-                "suggested": gemini_result.get("suggested"),
-                "reason": gemini_result.get("reason"),
-                "basis": gemini_result.get("basis"),
-                "ipa": ipa,
-            })
-
-        return jsonify({"word": word, "status": "not_found", "original": original})
-    except Exception as e:
-        logging.error(f"api_check_language 오류: {e}")
-        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

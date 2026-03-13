@@ -341,30 +341,6 @@
 
     .btn-dict:hover { background: var(--bg); }
 
-    .lang-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-top: 12px;
-      padding-top: 10px;
-      border-top: 1px solid var(--border);
-    }
-
-    .lang-select {
-      flex: 1;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 6px 10px;
-      font-family: 'Newsreader', serif;
-      font-size: 13px;
-      background: var(--bg);
-      color: var(--text);
-      outline: none;
-      cursor: pointer;
-    }
-
-    .lang-select:focus { border-color: var(--accent); }
-
     @media (max-width: 600px) {
       .container { padding: 16px; }
       .card { padding: 16px; }
@@ -605,17 +581,6 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  const LANG_OPTIONS = [
-    ['en','영어'],['de','독일어'],['fr','프랑스어'],['es','스페인어'],
-    ['it','이탈리아어'],['pt','포르투갈어'],['nl','네덜란드어'],['ru','러시아어'],
-    ['ja','일본어'],['other','기타'],
-  ];
-
-  function langSelectHtml(idx) {
-    const opts = LANG_OPTIONS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
-    return `<select id="lang-${idx}" class="lang-select"><option value="">언어 선택</option>${opts}</select>`;
-  }
-
   function renderResultItem(r, idx) {
     if (r.status === 'correct') {
       return `
@@ -737,7 +702,6 @@
         </div>`;
 
     } else {
-      // not_found → 언어 선택 UI
       return `
         <div class="result-item status-neutral" id="result-${idx}">
           <div class="result-header">
@@ -747,39 +711,7 @@
             </div>
             <span class="badge badge-neutral">용례 없음</span>
           </div>
-          <div class="lang-row">
-            ${langSelectHtml(idx)}
-            <button class="btn-small" id="langbtn-${idx}"
-              onclick="checkWithLanguage(${idx}, ${JSON.stringify(r.word)}, ${JSON.stringify(r.original || '')})">
-              검사
-            </button>
-          </div>
         </div>`;
-    }
-  }
-
-  async function checkWithLanguage(idx, word, original) {
-    const langSelect = document.getElementById('lang-' + idx);
-    const language = langSelect.value;
-    if (!language) { alert('언어를 선택해주세요.'); return; }
-
-    const btn = document.getElementById('langbtn-' + idx);
-    btn.disabled = true;
-    btn.textContent = '검사 중…';
-
-    try {
-      const resp = await fetch('/api/check_language', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({word, language, original}),
-      });
-      const data = await resp.json();
-      const el = document.getElementById('result-' + idx);
-      el.outerHTML = renderResultItem(data, idx);
-    } catch (e) {
-      alert('검사 중 오류가 발생했어요.');
-      btn.disabled = false;
-      btn.textContent = '검사';
     }
   }
 
