@@ -341,6 +341,30 @@
 
     .btn-dict:hover { background: var(--bg); }
 
+    .lang-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .lang-select {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: 'Newsreader', serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .lang-select:focus { border-color: var(--accent); }
+
     @media (max-width: 600px) {
       .container { padding: 16px; }
       .card { padding: 16px; }
@@ -577,148 +601,201 @@
 
   // ── 결과 렌더링 ───────────────────────────────────────────────
 
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  const LANG_OPTIONS = [
+    ['en','영어'],['de','독일어'],['fr','프랑스어'],['es','스페인어'],
+    ['it','이탈리아어'],['pt','포르투갈어'],['nl','네덜란드어'],['ru','러시아어'],
+    ['ja','일본어'],['other','기타'],
+  ];
+
+  function langSelectHtml(idx) {
+    const opts = LANG_OPTIONS.map(([v,l]) => `<option value="${v}">${l}</option>`).join('');
+    return `<select id="lang-${idx}" class="lang-select"><option value="">언어 선택</option>${opts}</select>`;
+  }
+
+  function renderResultItem(r, idx) {
+    if (r.status === 'correct') {
+      return `
+        <div class="result-item status-correct" id="result-${idx}">
+          <div class="result-header">
+            <div>
+              <div class="result-word">${escHtml(r.word)}</div>
+              <div class="result-meta">
+                ${r.original ? '원어 ' + escHtml(r.original) : ''}
+                ${r.country ? ' · ' + escHtml(r.country) : ''}
+                ${r.language ? ' · ' + escHtml(r.language) : ''}
+              </div>
+            </div>
+            <span class="badge badge-correct">올바른 표기</span>
+          </div>
+        </div>`;
+
+    } else if (r.status === 'check') {
+      const sugs = (r.suggestions || []).map(s =>
+        `<div style="margin-top:6px;">
+          <span class="suggestion-word" style="color:var(--check);">${escHtml(s.korean)}</span>
+          <span class="result-meta"> ${s.original ? '— ' + escHtml(s.original) : ''}${s.country ? ', ' + escHtml(s.country) : ''}</span>
+        </div>`
+      ).join('');
+      return `
+        <div class="result-item status-check" id="result-${idx}">
+          <div class="result-header">
+            <div class="result-word">${escHtml(r.word)}</div>
+            <span class="badge badge-check">확인 필요</span>
+          </div>
+          <div class="result-suggestion">${sugs}</div>
+        </div>`;
+
+    } else if (r.status === 'custom_correct') {
+      return `
+        <div class="result-item status-correct" id="result-${idx}">
+          <div class="result-header">
+            <div>
+              <div class="result-word">${escHtml(r.word)}</div>
+              <div class="result-meta">자체 사전 기준 올바른 표기</div>
+            </div>
+            <span class="badge badge-correct">올바른 표기</span>
+          </div>
+        </div>`;
+
+    } else if (r.status === 'custom_fix') {
+      return `
+        <div class="result-item status-warn" id="result-${idx}">
+          <div class="result-header">
+            <div class="result-word">${escHtml(r.word)}</div>
+            <span class="badge badge-warn">수정 필요</span>
+          </div>
+          <div class="result-suggestion">
+            <span class="suggestion-word" style="color:var(--warn);">${escHtml(r.correction || '')}</span>
+            <div class="suggestion-reason">자체 사전 기준 권장 표기</div>
+          </div>
+        </div>`;
+
+    } else if (r.status === 'typo_candidate') {
+      const similars = (r.similar || []).map(s =>
+        `<div style="margin-top:6px;">
+          <span class="suggestion-word" style="color:var(--check);">${escHtml(s.word)}</span>
+          <span class="result-meta"> — 편집 거리 ${s.distance}</span>
+        </div>`
+      ).join('');
+      return `
+        <div class="result-item status-check" id="result-${idx}">
+          <div class="result-header">
+            <div class="result-word">${escHtml(r.word)}</div>
+            <span class="badge badge-check">오타 의심</span>
+          </div>
+          <div class="result-suggestion">${similars}</div>
+        </div>`;
+
+    } else if (r.status === 'ai_correct') {
+      return `
+        <div class="result-item status-ai" id="result-${idx}">
+          <div class="result-header">
+            <div>
+              <div class="result-word">${escHtml(r.word)}</div>
+              ${r.reason ? `<div class="result-meta">${escHtml(r.reason)}</div>` : ''}
+            </div>
+            <span class="badge badge-ai-correct">올바른 표기 · AI</span>
+          </div>
+          ${r.ipa ? `<div class="suggestion-basis" style="margin-top:4px;">발음기호 ${escHtml(r.ipa)}</div>` : ''}
+          ${r.basis ? `<div class="suggestion-basis" style="margin-top:4px;">${escHtml(r.basis)}</div>` : ''}
+        </div>`;
+
+    } else if (r.status === 'ai_wrong') {
+      return `
+        <div class="result-item status-warn" id="result-${idx}">
+          <div class="result-header">
+            <div class="result-word">${escHtml(r.word)}</div>
+            <span class="badge badge-ai-warn">수정 권장 · AI</span>
+          </div>
+          ${r.suggested ? `
+          <div class="result-suggestion">
+            <span class="suggestion-word" style="color:var(--warn);">${escHtml(r.suggested)}</span>
+            ${r.reason ? `<div class="suggestion-reason">${escHtml(r.reason)}</div>` : ''}
+            ${r.ipa ? `<div class="suggestion-basis">발음기호 ${escHtml(r.ipa)}</div>` : ''}
+            ${r.basis ? `<div class="suggestion-basis">${escHtml(r.basis)}</div>` : ''}
+          </div>` : ''}
+        </div>`;
+
+    } else if (r.status === 'ai_unknown') {
+      return `
+        <div class="result-item status-neutral" id="result-${idx}">
+          <div class="result-header">
+            <div class="result-word">${escHtml(r.word)}</div>
+            <span class="badge badge-ai-unknown">용례 없음 · AI</span>
+          </div>
+          ${r.suggested ? `
+          <div class="result-suggestion">
+            <span class="suggestion-word" style="color:var(--text);">${escHtml(r.suggested)}</span>
+            ${r.reason ? `<div class="suggestion-reason">${escHtml(r.reason)}</div>` : ''}
+            ${r.ipa ? `<div class="suggestion-basis">발음기호 ${escHtml(r.ipa)}</div>` : ''}
+            ${r.basis ? `<div class="suggestion-basis">${escHtml(r.basis)}</div>` : ''}
+          </div>` : (r.reason ? `<div class="result-meta" style="margin-top:6px;">${escHtml(r.reason)}</div>` : '')}
+        </div>`;
+
+    } else {
+      // not_found → 언어 선택 UI
+      return `
+        <div class="result-item status-neutral" id="result-${idx}">
+          <div class="result-header">
+            <div>
+              <div class="result-word">${escHtml(r.word)}</div>
+              <div class="result-meta">국립국어원 용례 미등재</div>
+            </div>
+            <span class="badge badge-neutral">용례 없음</span>
+          </div>
+          <div class="lang-row">
+            ${langSelectHtml(idx)}
+            <button class="btn-small" id="langbtn-${idx}"
+              onclick="checkWithLanguage(${idx}, ${JSON.stringify(r.word)}, ${JSON.stringify(r.original || '')})">
+              검사
+            </button>
+          </div>
+        </div>`;
+    }
+  }
+
+  async function checkWithLanguage(idx, word, original) {
+    const langSelect = document.getElementById('lang-' + idx);
+    const language = langSelect.value;
+    if (!language) { alert('언어를 선택해주세요.'); return; }
+
+    const btn = document.getElementById('langbtn-' + idx);
+    btn.disabled = true;
+    btn.textContent = '검사 중…';
+
+    try {
+      const resp = await fetch('/api/check_language', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({word, language, original}),
+      });
+      const data = await resp.json();
+      const el = document.getElementById('result-' + idx);
+      el.outerHTML = renderResultItem(data, idx);
+    } catch (e) {
+      alert('검사 중 오류가 발생했어요.');
+      btn.disabled = false;
+      btn.textContent = '검사';
+    }
+  }
+
   function renderResults(results) {
     const list = document.getElementById('resultsList');
     const counts = { correct: 0, warn: 0, check: 0, aiCorrect: 0, aiWrong: 0, aiUnknown: 0, notfound: 0 };
 
     list.innerHTML = results.map((r, idx) => {
-      if (r.status === 'correct') {
-        counts.correct++;
-        return `
-          <div class="result-item status-correct">
-            <div class="result-header">
-              <div>
-                <div class="result-word">${r.word}</div>
-                <div class="result-meta">
-                  ${r.original ? '원어 ' + r.original : ''}
-                  ${r.country ? ' · ' + r.country : ''}
-                  ${r.language ? ' · ' + r.language : ''}
-                </div>
-              </div>
-              <span class="badge badge-correct">올바른 표기</span>
-            </div>
-          </div>`;
-
-      } else if (r.status === 'check') {
-        counts.check++;
-        const sugs = (r.suggestions || []).map(s =>
-          `<div style="margin-top:6px;">
-            <span class="suggestion-word" style="color:var(--check);">${s.korean}</span>
-            <span class="result-meta"> ${s.original ? '— ' + s.original : ''}${s.country ? ', ' + s.country : ''}</span>
-          </div>`
-        ).join('');
-        return `
-          <div class="result-item status-check">
-            <div class="result-header">
-              <div class="result-word">${r.word}</div>
-              <span class="badge badge-check">확인 필요</span>
-            </div>
-            <div class="result-suggestion">${sugs}</div>
-          </div>`;
-
-      } else if (r.status === 'custom_correct') {
-        counts.correct++;
-        return `
-          <div class="result-item status-correct">
-            <div class="result-header">
-              <div>
-                <div class="result-word">${r.word}</div>
-                <div class="result-meta">자체 사전 기준 올바른 표기</div>
-              </div>
-              <span class="badge badge-correct">올바른 표기</span>
-            </div>
-          </div>`;
-
-      } else if (r.status === 'custom_fix') {
-        counts.warn++;
-        return `
-          <div class="result-item status-warn">
-            <div class="result-header">
-              <div class="result-word">${r.word}</div>
-              <span class="badge badge-warn">수정 필요</span>
-            </div>
-            <div class="result-suggestion">
-              <span class="suggestion-word" style="color:var(--warn);">${r.correction || ''}</span>
-              <div class="suggestion-reason">자체 사전 기준 권장 표기</div>
-            </div>
-          </div>`;
-
-      } else if (r.status === 'typo_candidate') {
-        counts.check++;
-        const similars = (r.similar || []).map(s =>
-          `<div style="margin-top:6px;">
-            <span class="suggestion-word" style="color:var(--check);">${s.word}</span>
-            <span class="result-meta"> — 편집 거리 ${s.distance}</span>
-          </div>`
-        ).join('');
-        return `
-          <div class="result-item status-check">
-            <div class="result-header">
-              <div class="result-word">${r.word}</div>
-              <span class="badge badge-check">오타 의심</span>
-            </div>
-            <div class="result-suggestion">${similars}</div>
-          </div>`;
-
-      } else if (r.status === 'ai_correct') {
-        counts.aiCorrect++;
-        return `
-          <div class="result-item status-ai">
-            <div class="result-header">
-              <div>
-                <div class="result-word">${r.word}</div>
-                ${r.reason ? `<div class="result-meta">${r.reason}</div>` : ''}
-              </div>
-              <span class="badge badge-ai-correct">올바른 표기 · AI</span>
-            </div>
-            ${r.basis ? `<div class="suggestion-basis" style="margin-top:6px;">${r.basis}</div>` : ''}
-          </div>`;
-
-      } else if (r.status === 'ai_wrong') {
-        counts.aiWrong++;
-        return `
-          <div class="result-item status-warn">
-            <div class="result-header">
-              <div class="result-word">${r.word}</div>
-              <span class="badge badge-ai-warn">수정 권장 · AI</span>
-            </div>
-            ${r.suggested ? `
-            <div class="result-suggestion">
-              <span class="suggestion-word" style="color:var(--warn);">${r.suggested}</span>
-              ${r.reason ? `<div class="suggestion-reason">${r.reason}</div>` : ''}
-              ${r.basis ? `<div class="suggestion-basis">${r.basis}</div>` : ''}
-            </div>` : ''}
-          </div>`;
-
-      } else if (r.status === 'ai_unknown') {
-        counts.aiUnknown++;
-        return `
-          <div class="result-item status-neutral">
-            <div class="result-header">
-              <div class="result-word">${r.word}</div>
-              <span class="badge badge-ai-unknown">용례 없음 · AI</span>
-            </div>
-            ${r.suggested ? `
-            <div class="result-suggestion">
-              <span class="suggestion-word" style="color:var(--text);">${r.suggested}</span>
-              ${r.reason ? `<div class="suggestion-reason">${r.reason}</div>` : ''}
-              ${r.basis ? `<div class="suggestion-basis">${r.basis}</div>` : ''}
-            </div>` : (r.reason ? `<div class="result-meta" style="margin-top:6px;">${r.reason}</div>` : '')}
-          </div>`;
-
-      } else {
-        counts.notfound++;
-        return `
-          <div class="result-item status-neutral">
-            <div class="result-header">
-              <div>
-                <div class="result-word">${r.word}</div>
-                <div class="result-meta">국립국어원 용례 미등재</div>
-              </div>
-              <span class="badge badge-neutral">용례 없음</span>
-            </div>
-          </div>`;
-      }
+      if (r.status === 'correct' || r.status === 'custom_correct') counts.correct++;
+      else if (r.status === 'check' || r.status === 'typo_candidate') counts.check++;
+      else if (r.status === 'custom_fix') counts.warn++;
+      else if (r.status === 'ai_correct') counts.aiCorrect++;
+      else if (r.status === 'ai_wrong') counts.aiWrong++;
+      else if (r.status === 'ai_unknown') counts.aiUnknown++;
+      else counts.notfound++;
+      return renderResultItem(r, idx);
     }).join('');
 
     // 요약
